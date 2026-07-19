@@ -1,0 +1,198 @@
+/* ============================================================
+   ҚАЛТА — скрипт-мостик для Google Таблицы
+   Вставь ЦЕЛИКОМ в Расширения → Apps Script (вместо всего, что там есть).
+   Поменяй СЕКРЕТНОЕ СЛОВО в следующей строке на своё!
+   ============================================================ */
+var SECRET = 'поменяй-меня';
+
+var MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+var OP_HEAD = ['Дата','Тип','Категория','Сумма','Заметка','Счёт','uuid','updated','json'];
+var DEBT_HEAD = ['Кто','Направление','Сумма','Вернули','Остаток','Заметка','Статус','uuid','updated','json'];
+
+function doPost(e){
+  var out;
+  try{
+    var req = JSON.parse(e.postData.contents);
+    if(req.token !== SECRET) return json({ok:false, err:'auth'});
+    var lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try{
+      if(req.action === 'ping') out = {ok:true};
+      else if(req.action === 'push') out = doPush(req.changes || []);
+      else if(req.action === 'pull') out = doPull();
+      else out = {ok:false, err:'unknown action'};
+    } finally { lock.releaseLock(); }
+  } catch(err){
+    out = {ok:false, err:String(err)};
+  }
+  return json(out);
+}
+function json(o){
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+function ss(){ return SpreadsheetApp.getActiveSpreadsheet(); }
+
+/* ---------- листы ---------- */
+function monthSheetName(d){ // d = '2026-07-19'
+  var p = d.split('-');
+  return MONTHS[(+p[1])-1] + ' ' + p[0];
+}
+function getSheet(name, head){
+  var sh = ss().getSheetByName(name);
+  if(!sh){
+    sh = ss().insertSheet(name);
+    sh.getRange(1,1,1,head.length).setValues([head]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.hideColumns(head.length-2, 3); // uuid + updated + json прячем
+  }
+  return sh;
+}
+function metaSheet(){
+  var sh = ss().getSheetByName('_meta');
+  if(!sh){ sh = ss().insertSheet('_meta'); sh.hideSheet(); }
+  return sh;
+}
+function delSheet(){
+  var sh = ss().getSheetByName('_deleted');
+  if(!sh){ sh = ss().insertSheet('_deleted'); sh.hideSheet(); }
+  return sh;
+}
+
+/* ---------- push ---------- */
+function doPush(changes){
+  for(var i=0;i<changes.length;i++){
+    var c = changes[i];
+    if(c.kind==='op'){
+      if(c.action==='delete') opDelete(c.row);
+      else opUpsert(c.row);
+    } else if(c.kind==='debt'){
+      if(c.action==='delete') debtDelete(c.row);
+      else debtUpsert(c.row);
+    } else if(c.kind==='meta'){
+      metaSheet().getRange(1,1).setValue(JSON.stringify({
+        cats:c.row.cats, catsIn:c.row.catsIn, budgets:c.row.budgets, start:c.row.start, ts:c.ts||Date.now()
+      }));
+    }
+  }
+  return {ok:true, applied:changes.length};
+}
+function findRowIn(sh, uuid, colIdx){
+  var last = sh.getLastRow();
+  if(last < 2) return 0;
+  var col = sh.getRange(2, colIdx, last-1, 1).getValues();
+  for(var i=0;i<col.length;i++) if(String(col[i][0])===uuid) return i+2;
+  return 0;
+}
+function opRowVals(o){
+  var ty = o.ty==='e' ? 'Расход' : o.ty==='i' ? 'Доход' : 'Перевод';
+  var cat = o.ty==='tr' ? (o.dir==='k2c' ? 'Карта → Наличка' : 'Наличка → Карта') : (o.catName || o.cat || '');
+  var acc = o.ty==='tr' ? '' : (o.acc==='cash' ? 'Наличка' : 'Карта');
+  return [o.d, ty, cat, o.amt, o.note||'', acc, o.id, o.ts||Date.now(), JSON.stringify(o)];
+}
+function opUpsert(o){
+  var name = monthSheetName(o.d);
+  var sh = getSheet(name, OP_HEAD);
+  // если запись переехала в другой месяц — убрать из всех прочих месячных листов
+  removeOpEverywhereExcept(o.id, name);
+  var row = findRowIn(sh, o.id, 7);
+  var vals = opRowVals(o);
+  if(row) sh.getRange(row,1,1,vals.length).setValues([vals]);
+  else sh.appendRow(vals);
+}
+function removeOpEverywhereExcept(uuid, exceptName){
+  var sheets = ss().getSheets();
+  for(var i=0;i<sheets.length;i++){
+    var nm = sheets[i].getName();
+    if(nm===exceptName) continue;
+    if(!/^[А-Яа-яЁё]+ \d{4}$/.test(nm)) continue;
+    var r = findRowIn(sheets[i], uuid, 7);
+    if(r) sheets[i].deleteRow(r);
+  }
+}
+function opDelete(o){
+  removeOpEverywhereExcept(o.id, '___none___');
+  delSheet().appendRow(['op', o.id, o.ts||Date.now()]);
+}
+function debtRowVals(d){
+  var paid = 0;
+  (d.pays||[]).forEach(function(p){ paid += p.amt; });
+  var rest = d.amt - paid;
+  return [d.name, d.dir==='owed' ? 'Мне должны' : 'Я должен', d.amt, paid, rest,
+          d.note||'', rest<=0 ? 'Погашен' : 'Открыт', d.id, d.ts||Date.now(), JSON.stringify(d)];
+}
+function debtUpsert(d){
+  var sh = getSheet('Долги', DEBT_HEAD);
+  var row = findRowIn(sh, d.id, 8);
+  var vals = debtRowVals(d);
+  if(row) sh.getRange(row,1,1,vals.length).setValues([vals]);
+  else sh.appendRow(vals);
+}
+function debtDelete(d){
+  var sh = ss().getSheetByName('Долги');
+  if(sh){
+    var r = findRowIn(sh, d.id, 8);
+    if(r) sh.deleteRow(r);
+  }
+  delSheet().appendRow(['debt', d.id, d.ts||Date.now()]);
+}
+
+/* ---------- pull ---------- */
+function doPull(){
+  var ops = [];
+  var sheets = ss().getSheets();
+  for(var i=0;i<sheets.length;i++){
+    var nm = sheets[i].getName();
+    if(!/^[А-Яа-яЁё]+ \d{4}$/.test(nm)) continue;
+    var last = sheets[i].getLastRow();
+    if(last < 2) continue;
+    var vals = sheets[i].getRange(2,1,last-1,9).getValues();
+    for(var r=0;r<vals.length;r++){
+      var v = vals[r];
+      if(!v[6]) continue;
+      var o = null;
+      try{ o = JSON.parse(v[8]); }catch(e){}
+      if(!o || !o.id){
+        var ty = v[1]==='Расход' ? 'e' : v[1]==='Доход' ? 'i' : 'tr';
+        o = { id:String(v[6]), ty:ty, amt:+v[3]||0, note:String(v[4]||''), d:normDate(v[0]), ts:+v[7]||0 };
+        if(ty==='tr'){ o.dir = String(v[2]).indexOf('Карта →')===0 ? 'k2c' : 'c2k'; }
+        else { o.cat = String(v[2]); o.acc = v[5]==='Наличка' ? 'cash' : 'card'; }
+      }
+      ops.push(o);
+    }
+  }
+  var debts = [];
+  var dsh = ss().getSheetByName('Долги');
+  if(dsh && dsh.getLastRow() > 1){
+    var dvals = dsh.getRange(2,1,dsh.getLastRow()-1,10).getValues();
+    for(var q=0;q<dvals.length;q++){
+      var dv = dvals[q];
+      if(!dv[7]) continue;
+      var full = null;
+      try{ full = JSON.parse(dv[9]); }catch(e){}
+      if(full && full.id) debts.push(full);
+      else debts.push({ id:String(dv[7]), name:String(dv[0]), dir:dv[1]==='Мне должны'?'owed':'owe',
+        amt:+dv[2]||0, note:String(dv[5]||''), pays:[], ts:+dv[8]||0 });
+    }
+  }
+  var deleted = [], deletedDebts = [];
+  var xsh = ss().getSheetByName('_deleted');
+  if(xsh && xsh.getLastRow() > 0){
+    var xv = xsh.getRange(1,1,xsh.getLastRow(),3).getValues();
+    for(var w=0;w<xv.length;w++){
+      var t = { id:String(xv[w][1]), ts:+xv[w][2]||0 };
+      if(xv[w][0]==='op') deleted.push(t); else deletedDebts.push(t);
+    }
+  }
+  var meta = null;
+  var msh = ss().getSheetByName('_meta');
+  if(msh){
+    try{ meta = JSON.parse(msh.getRange(1,1).getValue()); }catch(e){}
+  }
+  return {ok:true, ops:ops, debts:debts, deleted:deleted, deletedDebts:deletedDebts, meta:meta};
+}
+function normDate(v){
+  if(v instanceof Date){
+    return v.getFullYear()+'-'+('0'+(v.getMonth()+1)).slice(-2)+'-'+('0'+v.getDate()).slice(-2);
+  }
+  return String(v).slice(0,10);
+}
