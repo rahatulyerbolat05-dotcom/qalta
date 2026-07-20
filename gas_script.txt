@@ -17,7 +17,8 @@ function doPost(e){
     var lock = LockService.getScriptLock();
     lock.waitLock(20000);
     try{
-      if(req.action === 'ping') out = {ok:true};
+      if(req.action === 'ping') out = {ok:true, rev:getRev()};
+      else if(req.action === 'rev') out = {ok:true, rev:getRev()};
       else if(req.action === 'push') out = doPush(req.changes || []);
       else if(req.action === 'pull') out = doPull();
       else out = {ok:false, err:'unknown action'};
@@ -59,6 +60,15 @@ function delSheet(){
 }
 
 /* ---------- push ---------- */
+function getRev(){
+  var v = metaSheet().getRange(1,2).getValue();
+  return +v || 0;
+}
+function bumpRev(){
+  var r = getRev()+1;
+  metaSheet().getRange(1,2).setValue(r);
+  return r;
+}
 function doPush(changes){
   for(var i=0;i<changes.length;i++){
     var c = changes[i];
@@ -70,11 +80,12 @@ function doPush(changes){
       else debtUpsert(c.row);
     } else if(c.kind==='meta'){
       metaSheet().getRange(1,1).setValue(JSON.stringify({
-        cats:c.row.cats, catsIn:c.row.catsIn, budgets:c.row.budgets, start:c.row.start, ts:c.ts||Date.now()
+        cats:c.row.cats, catsIn:c.row.catsIn, budgets:c.row.budgets, start:c.row.start,
+        cfg:c.row.cfg||null, ts:c.ts||Date.now()
       }));
     }
   }
-  return {ok:true, applied:changes.length};
+  return {ok:true, applied:changes.length, rev:bumpRev()};
 }
 function findRowIn(sh, uuid, colIdx){
   var last = sh.getLastRow();
@@ -188,7 +199,7 @@ function doPull(){
   if(msh){
     try{ meta = JSON.parse(msh.getRange(1,1).getValue()); }catch(e){}
   }
-  return {ok:true, ops:ops, debts:debts, deleted:deleted, deletedDebts:deletedDebts, meta:meta};
+  return {ok:true, ops:ops, debts:debts, deleted:deleted, deletedDebts:deletedDebts, meta:meta, rev:getRev()};
 }
 function normDate(v){
   if(v instanceof Date){

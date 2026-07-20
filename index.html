@@ -755,6 +755,10 @@ input:focus-visible{outline:none;}
       <input type="text" inputmode="numeric" id="obBudget" placeholder="напр. 300 000 ₸">
     </div>
     <button type="button" class="bigsave" id="obGo"><svg class="isv"><use href="#i-check"/></svg>Поехали!</button>
+    <button type="button" class="pbtn ghost" id="obConnect" style="width:100%;margin-top:12px">
+      <svg class="isv" style="width:17px;height:17px"><use href="#i-table"/></svg>У меня уже есть таблица Қалты</button>
+    <p style="font-size:12.5px;color:var(--ink-faint);text-align:center;margin:10px 0 0;line-height:1.5">
+      Уже пользуешься Қалтой на другом устройстве?<br>Подключи ту же таблицу — всё появится само.</p>
   </div>
 </div>
 
@@ -1268,6 +1272,7 @@ $('themeGrid').addEventListener('click',function(e){
   var b=e.target.closest('[data-theme-id]'); if(!b) return;
   document.documentElement.classList.add('themefade');
   cfg.theme=b.getAttribute('data-theme-id'); saveCfg(); applyTheme(); renderThemeGrid();
+  if(gas.url) enqueueMeta();
   clearTimeout(themeFadeTm);
   themeFadeTm=setTimeout(function(){ document.documentElement.classList.remove('themefade'); },500);
 });
@@ -1795,7 +1800,7 @@ $('impFile').addEventListener('change',function(){
       var j=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));
       if(!j||j.app!=='qalta'||!j.data) throw 0;
       askConfirm('Заменить все данные на данные из файла?',function(){
-        D=j.data; saveD(); fullPush(); rerenderAll(); toast('Восстановлено из копии');
+        D=j.data; saveD(); fullPush(); enqueueMeta(); rerenderAll(); toast('Восстановлено из копии');
       });
     }catch(e){ toast('Это не файл Қалты'); }
   };
@@ -1803,6 +1808,11 @@ $('impFile').addEventListener('change',function(){
 });
 
 /* ---------- Онбординг ---------- */
+$('obConnect').addEventListener('click',function(){
+  $('gasUrl').value=gas.url||''; $('gasToken').value=gas.token||'';
+  $('gasOffRow').style.display='none';
+  $('gasSheet').classList.add('show');
+});
 $('obGo').addEventListener('click',function(){
   D.start.cash=parseAmt($('obCash').value);
   D.start.card=parseAmt($('obCard').value);
@@ -1858,17 +1868,23 @@ function enqueueOp(action,op){
   SY.q.push({kind:'op',action:action,row:row,ts:Date.now()}); saveSY(); syncBadge(); flushSoon(); }
 function enqueueDebt(action,d){ SY.q.push({kind:'debt',action:action,row:d,ts:Date.now()}); saveSY(); syncBadge(); flushSoon(); }
 function enqueueMeta(){
+  D.metaTs=Date.now(); saveD();
   SY.q=SY.q.filter(function(c){ return c.kind!=='meta'; });
-  SY.q.push({kind:'meta',action:'upsert',row:{cats:D.cats,catsIn:D.catsIn,budgets:D.budgets,start:D.start},ts:Date.now()});
+  SY.q.push({kind:'meta',action:'upsert',row:{cats:D.cats,catsIn:D.catsIn,budgets:D.budgets,start:D.start,
+    cfg:{theme:cfg.theme,lastAcc:cfg.lastAcc}},ts:D.metaTs});
   saveSY(); syncBadge(); flushSoon();
 }
 function fullPush(){
-  liveOps().forEach(function(o){ SY.q.push({kind:'op',action:'upsert',row:o,ts:Date.now()}); });
+  liveOps().forEach(function(o){
+    var row=Object.assign({},o);
+    if(o.ty!=='tr') row.catName=catOf(o.cat,o.ty).name;
+    SY.q.push({kind:'op',action:'upsert',row:row,ts:Date.now()});
+  });
   liveDebts().forEach(function(d){ SY.q.push({kind:'debt',action:'upsert',row:d,ts:Date.now()}); });
-  enqueueMeta();
+  saveSY(); syncBadge();
 }
 var flushTm=null, syncing=false;
-function flushSoon(){ clearTimeout(flushTm); flushTm=setTimeout(flush,1200); }
+function flushSoon(){ clearTimeout(flushTm); flushTm=setTimeout(flush,400); }
 function gasCall(payload){
   return fetch(gas.url,{ method:'POST', body:JSON.stringify(Object.assign({token:gas.token},payload)) })
     .then(function(r){ return r.json(); });
@@ -1880,7 +1896,9 @@ function flush(){
   return gasCall({action:'push',changes:batch}).then(function(res){
     if(res&&res.ok){
       SY.q=SY.q.slice(batch.length);
-      SY.lastSync=Date.now(); saveSY();
+      SY.lastSync=Date.now();
+      if(res.rev) SY.rev=res.rev;
+      saveSY();
       if(SY.q.length) return flushNowAgain();
     } else { throw 0; }
   }).catch(function(){ /* остаёмся в очереди, попробуем позже */ })
@@ -1892,7 +1910,11 @@ function pull(){
   return gasCall({action:'pull'}).then(function(res){
     if(!res||!res.ok) return;
     mergeRemote(res);
-    SY.lastSync=Date.now(); saveSY();
+    SY.lastSync=Date.now();
+    if(res.rev!=null) SY.rev=res.rev;
+    saveSY();
+    /* устройство с настроенной таблицей, но пустой памятью: пропускаем онбординг */
+    if(!D.ob&&res.meta){ D.ob=true; saveD(); show('home'); }
     rerenderAll(); renderSyncInfo();
   }).catch(function(){});
 }
@@ -1925,6 +1947,11 @@ function mergeRemote(res){
     if(res.meta.catsIn) D.catsIn=res.meta.catsIn;
     if(res.meta.budgets) D.budgets=res.meta.budgets;
     if(res.meta.start) D.start=res.meta.start;
+    if(res.meta.cfg){
+      if(res.meta.cfg.theme&&res.meta.cfg.theme!==cfg.theme){ cfg.theme=res.meta.cfg.theme; applyTheme(); }
+      if(res.meta.cfg.lastAcc) cfg.lastAcc=res.meta.cfg.lastAcc;
+      saveCfg();
+    }
     D.metaTs=res.meta.ts; changed=true;
   }
   if(changed) saveD();
@@ -1962,8 +1989,16 @@ $('gasSave').addEventListener('click',function(){
     if(res&&res.ok){
       $('gasSheet').classList.remove('show');
       toast('Таблица подключена! 🎉');
-      fullPush(); flush().then(pull);
-      renderSyncInfo();
+      /* сначала забираем всё из таблицы, потом досылаем своё —
+         второе устройство мгновенно становится копией первого */
+      gasCall({action:'pull'}).then(function(pr){
+        var serverEmpty=!(pr&&pr.ok&&pr.meta);
+        if(pr&&pr.ok){ mergeRemote(pr); SY.lastSync=Date.now(); saveSY(); }
+        if(!D.ob){ D.ob=true; saveD(); show('home'); }
+        fullPush();
+        if(serverEmpty) enqueueMeta();
+        flush().then(function(){ rerenderAll(); renderSyncInfo(); });
+      });
     } else if(res&&res.err==='auth'){ toast('Секретное слово не совпадает'); }
     else { toast('Скрипт ответил странно — проверь шаги'); }
   }).catch(function(){ toast('Не достучался. Проверь ссылку и доступ «Все»'); });
@@ -1983,6 +2018,16 @@ $('syncNow').addEventListener('click',function(){
 
 /* ---------- События сети/видимости ---------- */
 window.addEventListener('online',function(){ flush(); });
+/* «прямой эфир»: каждые 4 секунды крошечный вопрос таблице «что нового?» —
+   полная загрузка происходит только если версия изменилась */
+var revBusy=false;
+setInterval(function(){
+  if(document.visibilityState!=='visible'||!gas.url||!navigator.onLine||syncing||revBusy) return;
+  revBusy=true;
+  gasCall({action:'rev'}).then(function(res){
+    if(res&&res.ok&&res.rev!=null&&res.rev!==SY.rev){ return pull(); }
+  }).catch(function(){}).finally(function(){ revBusy=false; });
+},4000);
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='visible'){ pull(); flush(); }
 });
