@@ -522,6 +522,28 @@ input:focus-visible{outline:none;}
 .cg .em{font-size:24px;line-height:1;}
 .cg:active{transform:scale(.94);border-color:var(--accent);}
 .cg.on{border-color:var(--accent);background:var(--accent-sl);color:var(--ink);}
+/* крупная плашка — две клетки, как виджет iOS */
+.cg.big{grid-column:span 2;flex-direction:row;gap:11px;font-size:14.5px;justify-content:flex-start;padding-left:16px;}
+.cg.big .em{font-size:30px;}
+.catgrid .cg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+.catgrid.editing .cg{touch-action:none;}
+/* режим правки сетки: дрожание как на домашнем экране айфона */
+@keyframes jiggle{0%{transform:rotate(-1.4deg);}50%{transform:rotate(1.4deg);}100%{transform:rotate(-1.4deg);}}
+.catgrid.editing .cg{animation:jiggle .3s ease-in-out infinite;}
+.catgrid.editing .cg:nth-child(2n){animation-delay:.15s;}
+.catgrid.editing .cg:nth-child(3n){animation-delay:.08s;}
+.cg.dragsrc{opacity:.25;}
+.dragghost{position:fixed;z-index:99;pointer-events:none;margin:0;
+  transform:scale(1.08);box-shadow:0 18px 44px -10px rgba(0,0,0,.55);}
+.gridbar{position:sticky;bottom:0;z-index:5;display:none;align-items:center;gap:10px;
+  background:var(--glass);border:1px solid var(--glass-line);border-radius:14px;padding:9px 9px 9px 14px;margin-top:10px;
+  -webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);}
+.gridbar.show{display:flex;}
+.gridbar .h{flex:1;font-size:12.5px;color:var(--ink-soft);line-height:1.4;}
+.gridbar .done{height:40px;padding:0 16px;border:0;border-radius:11px;background:var(--accent);
+  color:var(--accent-ink);font-weight:800;font-size:14px;}
+/* стрелки и размер в настройках категорий */
+.catmg .mini.szb{font-size:11px;font-weight:800;letter-spacing:.02em;}
 .notefield{width:100%;font-size:16px;color:var(--ink);background:var(--card);border:1.5px solid var(--line);
   border-radius:12px;padding:11px 13px;-webkit-appearance:none;appearance:none;margin-bottom:10px;}
 .notefield:focus{border-color:var(--accent);outline:none;}
@@ -864,6 +886,10 @@ input:focus-visible{outline:none;}
       <div id="catSection">
         <div class="sect" style="margin-top:0" id="catSectLbl">Категория — тапни и готово</div>
         <div class="catgrid" id="catGrid"></div>
+        <div class="gridbar" id="gridBar">
+          <span class="h">Тап — размер плашки · перетяни — порядок</span>
+          <button type="button" class="done" id="gridDone">Готово</button>
+        </div>
       </div>
 
       <input type="text" class="notefield" id="noteField" placeholder="Заметка (не обязательно)" autocomplete="off">
@@ -1410,14 +1436,17 @@ function renderCatGrid(){
   var list=addTy==='i'?D.catsIn:D.cats;
   list.forEach(function(c){
     var b=document.createElement('button');
-    b.type='button'; b.className='cg'; b.setAttribute('data-cat',c.id);
+    b.type='button'; b.className='cg'+(c.sz===2?' big':''); b.setAttribute('data-cat',c.id);
     if(editingId && editCat===c.id) b.classList.add('on');
+    if(gridEdit && gridDragId===c.id) b.classList.add('dragsrc');
     b.innerHTML='<span class="em">'+c.em+'</span>'+c.name;
     host.appendChild(b);
   });
 }
 var editCat=null;
 function resetAdd(){
+  if(gridEdit){ gridEdit=false; gridDragId=null;
+    $('catGrid').classList.remove('editing'); $('gridBar').classList.remove('show'); }
   addTy='e'; amtStr=''; editingId=null; editCat=null;
   addAcc=cfg.lastAcc||'cash';
   $('noteField').value=''; $('dateField').value=todayStr();
@@ -1484,11 +1513,106 @@ function commitNew(catId){
   toast('Записал: '+lbl+' '+(addTy==='i'?'+':addTy==='tr'?'':'−')+fmt(op.amt));
   resetAdd(); show('home');
 }
+var gridEdit=false, gridDragId=null;
+function curCatList(){ return addTy==='i'?D.catsIn:D.cats; }
+function enterGridEdit(){
+  if(gridEdit||addTy==='tr') return;
+  gridEdit=true;
+  $('catGrid').classList.add('editing');
+  $('gridBar').classList.add('show');
+  $('catSectLbl').textContent='Настрой сетку под себя';
+  if(navigator.vibrate) navigator.vibrate(10);
+}
+function exitGridEdit(){
+  gridEdit=false; gridDragId=null;
+  $('catGrid').classList.remove('editing');
+  $('gridBar').classList.remove('show');
+  $('catSectLbl').textContent=editingId?'Категория':'Категория — тапни и готово';
+  saveD(); enqueueMeta(); renderCatGrid();
+}
+$('gridDone').addEventListener('click',exitGridEdit);
 $('catGrid').addEventListener('click',function(e){
   var b=e.target.closest('[data-cat]'); if(!b) return;
   var catId=b.getAttribute('data-cat');
+  if(gridEdit){
+    if(gridSuppressClick){ gridSuppressClick=false; return; }
+    /* тап в режиме правки = размер 1×↔2× */
+    var list=curCatList();
+    list.forEach(function(c){ if(c.id===catId) c.sz=(c.sz===2?1:2); });
+    renderCatGrid();
+    return;
+  }
   if(editingId){ editCat=catId; renderCatGrid(); return; }
   commitNew(catId);
+});
+/* долгий тап по плашке → режим правки; в режиме — перетаскивание */
+var lpTm=null, lpStart=null, gridSuppressClick=false, ghost=null, dragFrom=-1;
+$('catGrid').addEventListener('pointerdown',function(e){
+  var b=e.target.closest('[data-cat]'); if(!b) return;
+  lpStart={x:e.clientX,y:e.clientY,id:b.getAttribute('data-cat'),el:b};
+  if(!gridEdit){
+    clearTimeout(lpTm);
+    lpTm=setTimeout(function(){ enterGridEdit(); },450);
+  } else {
+    /* готовим drag */
+    gridDragId=lpStart.id;
+    dragFrom=-1;
+  }
+});
+document.addEventListener('pointermove',function(e){
+  if(!lpStart) return;
+  var dx=e.clientX-lpStart.x, dy=e.clientY-lpStart.y;
+  if(!gridEdit){
+    if(Math.abs(dx)>9||Math.abs(dy)>9){ clearTimeout(lpTm); lpStart=null; }
+    return;
+  }
+  if(!gridDragId) return;
+  if(!ghost&&(Math.abs(dx)>7||Math.abs(dy)>7)){
+    /* поднимаем призрак плашки */
+    var r=lpStart.el.getBoundingClientRect();
+    ghost=lpStart.el.cloneNode(true);
+    ghost.className=lpStart.el.className+' dragghost';
+    ghost.style.width=r.width+'px'; ghost.style.height=r.height+'px';
+    ghost.style.left=r.left+'px'; ghost.style.top=r.top+'px';
+    ghost._ox=e.clientX-r.left; ghost._oy=e.clientY-r.top;
+    document.body.appendChild(ghost);
+    lpStart.el.classList.add('dragsrc');
+    gridSuppressClick=true;
+  }
+  if(ghost){
+    e.preventDefault();
+    ghost.style.left=(e.clientX-ghost._ox)+'px';
+    ghost.style.top=(e.clientY-ghost._oy)+'px';
+    /* над кем палец? переставляем на лету */
+    ghost.style.display='none';
+    var under=document.elementFromPoint(e.clientX,e.clientY);
+    ghost.style.display='';
+    var target=under&&under.closest?under.closest('#catGrid [data-cat]'):null;
+    if(target){
+      var tid=target.getAttribute('data-cat');
+      if(tid!==gridDragId){
+        var list=curCatList();
+        var fi=-1, ti=-1;
+        list.forEach(function(c,i){ if(c.id===gridDragId) fi=i; if(c.id===tid) ti=i; });
+        if(fi>-1&&ti>-1){
+          var moved=list.splice(fi,1)[0];
+          list.splice(ti,0,moved);
+          renderCatGrid();
+        }
+      }
+    }
+  }
+},{passive:false});
+document.addEventListener('pointerup',function(){
+  clearTimeout(lpTm);
+  if(ghost){ ghost.remove(); ghost=null; renderCatGrid();
+    setTimeout(function(){ gridSuppressClick=false; },350); }
+  gridDragId=null; lpStart=null;
+});
+document.addEventListener('pointercancel',function(){
+  clearTimeout(lpTm);
+  if(ghost){ ghost.remove(); ghost=null; renderCatGrid(); }
+  gridDragId=null; lpStart=null;
 });
 $('saveOp').addEventListener('click',function(){
   var base=collectOp();
@@ -1733,6 +1857,9 @@ function renderCatMg(){
     g[2].forEach(function(c){
       var el=document.createElement('div'); el.className='catmg';
       el.innerHTML='<span class="em">'+c.em+'</span><span class="nm">'+c.name+'</span>'+
+        '<button type="button" class="mini" data-catup="'+g[1]+':'+c.id+'" aria-label="Выше">↑</button>'+
+        '<button type="button" class="mini" data-catdn="'+g[1]+':'+c.id+'" aria-label="Ниже">↓</button>'+
+        '<button type="button" class="mini szb" data-catsz="'+g[1]+':'+c.id+'">'+(c.sz===2?'2×':'1×')+'</button>'+
         '<button type="button" class="mini" data-catedit="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-edit"/></svg></button>'+
         '<button type="button" class="mini" data-catdel="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-del"/></svg></button>';
       host.appendChild(el);
@@ -1740,6 +1867,25 @@ function renderCatMg(){
   });
 }
 document.addEventListener('click',function(e){
+  var up=e.target.closest('[data-catup]'), dn=e.target.closest('[data-catdn]'), sz=e.target.closest('[data-catsz]');
+  if(up||dn){
+    var pm=(up||dn).getAttribute(up?'data-catup':'data-catdn').split(':');
+    var lst=pm[0]==='i'?D.catsIn:D.cats;
+    var idx=-1; lst.forEach(function(c,i){ if(c.id===pm[1]) idx=i; });
+    var to=up?idx-1:idx+1;
+    if(idx>-1&&to>=0&&to<lst.length){
+      var t=lst[idx]; lst[idx]=lst[to]; lst[to]=t;
+      saveD(); enqueueMeta(); renderCatMg();
+    }
+    return;
+  }
+  if(sz){
+    var ps=sz.getAttribute('data-catsz').split(':');
+    var ls=ps[0]==='i'?D.catsIn:D.cats;
+    ls.forEach(function(c){ if(c.id===ps[1]) c.sz=(c.sz===2?1:2); });
+    saveD(); enqueueMeta(); renderCatMg();
+    return;
+  }
   var ed=e.target.closest('[data-catedit]');
   if(ed){
     var p=ed.getAttribute('data-catedit').split(':');
