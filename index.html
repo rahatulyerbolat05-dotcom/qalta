@@ -517,6 +517,9 @@ input:focus-visible{outline:none;}
 .accseg .as{height:38px;padding:0 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);
   color:var(--ink-soft);font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:7px;}
 .accseg .as.on{border-color:var(--accent);color:var(--accent);background:var(--accent-sl);}
+.accseg.dseg{margin:2px 0 4px;}
+.accseg.dseg .as{flex:1;padding:0 6px;font-size:12.5px;justify-content:center;gap:5px;}
+.accseg.dseg .as .isv{width:15px;height:15px;}
 .accseg .as .isv{width:16px;height:16px;}
 .catgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:12px;}
 .cg{border:1.5px solid var(--line);background:var(--card);border-radius:15px;padding:10px 4px 8px;
@@ -546,7 +549,9 @@ input:focus-visible{outline:none;}
 .gridbar .done{height:40px;padding:0 16px;border:0;border-radius:11px;background:var(--accent);
   color:var(--accent-ink);font-weight:800;font-size:14px;}
 /* стрелки и размер в настройках категорий */
-.catmg .mini.szb{font-size:11px;font-weight:800;letter-spacing:.02em;}
+.catmg .mini.szb{font-size:12px;font-weight:800;letter-spacing:.02em;min-width:46px;margin-left:6px;
+  background:var(--accent-sl);color:var(--accent);}
+.catmg .mini.szb:active{transform:scale(.9);}
 .notefield{width:100%;font-size:16px;color:var(--ink);background:var(--card);border:1.5px solid var(--line);
   border-radius:12px;padding:11px 13px;-webkit-appearance:none;appearance:none;margin-bottom:10px;}
 .notefield:focus{border-color:var(--accent);outline:none;}
@@ -1101,6 +1106,12 @@ input:focus-visible{outline:none;}
     <input type="text" id="debtShName" placeholder="напр. Арман" autocomplete="off">
     <label>Сумма</label>
     <input type="text" inputmode="numeric" id="debtShAmt" placeholder="напр. 20 000">
+    <label id="debtAccLbl">Ты отдал эти деньги? Списать со счёта:</label>
+    <div class="accseg dseg" id="debtAccSeg">
+      <button type="button" class="as on" data-dacc="cash"><svg class="isv"><use href="#i-cash"/></svg>Наличка</button>
+      <button type="button" class="as" data-dacc="card"><svg class="isv"><use href="#i-card"/></svg>Карта</button>
+      <button type="button" class="as" data-dacc="none">Не в счёт</button>
+    </div>
     <label>Заметка (не обязательно)</label>
     <input type="text" id="debtShNote" placeholder="за что" autocomplete="off">
     <div class="btnrow2">
@@ -1326,6 +1337,15 @@ function calcBalances(){
     if(o.ty==='e'){ if(o.acc==='cash') cash-=o.amt; else card-=o.amt; }
     else if(o.ty==='i'){ if(o.acc==='cash') cash+=o.amt; else card+=o.amt; }
     else if(o.ty==='tr'){ if(o.dir==='k2c'){ card-=o.amt; cash+=o.amt; } else { cash-=o.amt; card+=o.amt; } }
+  });
+  /* долги, где деньги реально перешли из рук в руки, двигают баланс на остаток:
+     взял в долг (owe) — деньги у меня на руках (+), дал в долг (owed) — деньги ушли (−).
+     возвраты сами уменьшают остаток → баланс подстраивается автоматически. */
+  liveDebts().forEach(function(d){
+    if(!d.acc) return;
+    var rem=debtRest(d); if(rem<=0) return;
+    var sign=d.dir==='owe'?1:-1;
+    if(d.acc==='cash') cash+=sign*rem; else card+=sign*rem;
   });
   return {cash:cash,card:card,total:cash+card};
 }
@@ -1790,29 +1810,46 @@ function debtCard(d){
     '<span class="dir '+d.dir+'">'+(d.dir==='owed'?'мне должны':'я должен')+'</span></div>'+
     '<div class="rest">'+(rest>0?fmt(rest):'Погашено ✓')+'</div>'+
     '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
-    '<div class="sub">'+(paid>0?('вернули '+fmt(paid)+' из '+fmt(d.amt)):('всего '+fmt(d.amt)))+(d.note?' · '+d.note:'')+'</div>';
+    '<div class="sub">'+(paid>0?('вернули '+fmt(paid)+' из '+fmt(d.amt)):('всего '+fmt(d.amt)))+(d.note?' · '+d.note:'')+(d.acc?(' · '+(d.acc==='cash'?'наличка':'карта')+' в балансе'):'')+'</div>';
   return el;
 }
-var debtDir='owed', paySheetId=null;
+var debtDir='owed', debtAcc='cash', paySheetId=null;
+function updateDebtAccUI(){
+  $('debtAccLbl').textContent = debtDir==='owe'
+    ? 'Ты получил эти деньги? Зачислить на счёт:'
+    : 'Ты отдал эти деньги? Списать со счёта:';
+  document.querySelectorAll('#debtAccSeg .as').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-dacc')===debtAcc);
+  });
+}
 $('addDebtBtn').addEventListener('click',function(){
-  debtDir='owed';
+  debtDir='owed'; debtAcc='cash';
   document.querySelectorAll('#debtDirTabs .tt').forEach(function(b){ b.classList.toggle('on',b.getAttribute('data-dir')==='owed'); });
   $('debtShName').value=''; $('debtShAmt').value=''; $('debtShNote').value='';
+  updateDebtAccUI();
   $('debtSheet').classList.add('show');
 });
 $('debtDirTabs').addEventListener('click',function(e){
   var b=e.target.closest('[data-dir]'); if(!b) return;
   debtDir=b.getAttribute('data-dir');
   document.querySelectorAll('#debtDirTabs .tt').forEach(function(x){ x.classList.toggle('on',x===b); });
+  updateDebtAccUI();
+});
+$('debtAccSeg').addEventListener('click',function(e){
+  var b=e.target.closest('[data-dacc]'); if(!b) return;
+  debtAcc=b.getAttribute('data-dacc'); updateDebtAccUI();
 });
 $('debtShSave').addEventListener('click',function(){
   var name=$('debtShName').value.trim(), amt=parseAmt($('debtShAmt').value);
   if(!name){ toast('Напиши, кто'); return; }
   if(amt<=0){ toast('Укажи сумму'); return; }
-  var d={ id:uuid(), name:name, dir:debtDir, amt:amt, note:$('debtShNote').value.trim(), pays:[], ts:Date.now() };
+  var acc=debtAcc==='none'?null:debtAcc;
+  var d={ id:uuid(), name:name, dir:debtDir, amt:amt, note:$('debtShNote').value.trim(), acc:acc, pays:[], ts:Date.now() };
   D.debts.push(d); saveD(); enqueueDebt('upsert',d);
   $('debtSheet').classList.remove('show');
-  toast('Долг записан'); renderDebts();
+  if(acc){ toast('Долг записан, '+(debtDir==='owe'?'+':'−')+fmt(amt)+' на баланс'); }
+  else { toast('Долг записан'); }
+  renderDebts(); renderHome();
 });
 document.addEventListener('click',function(e){
   var card=e.target.closest('[data-debt]'); if(!card) return;
@@ -1846,7 +1883,7 @@ $('payShSave').addEventListener('click',function(){
   saveD(); enqueueDebt('upsert',d);
   $('paySheet').classList.remove('show');
   toast(debtRest(d)<=0?'Долг погашен полностью 🎉':'Возврат записан');
-  renderDebts();
+  renderDebts(); renderHome();
 });
 $('payShDel').addEventListener('click',function(){
   askConfirm('Удалить долг совсем? Он исчезнет и из таблицы.',function(){
@@ -1854,7 +1891,7 @@ $('payShDel').addEventListener('click',function(){
     if(!d) return;
     d.del=true; d.ts=Date.now(); saveD(); enqueueDebt('delete',d);
     $('paySheet').classList.remove('show');
-    toast('Долг удалён'); renderDebts();
+    toast('Долг удалён'); renderDebts(); renderHome();
   });
 });
 
@@ -1868,9 +1905,9 @@ function renderCatMg(){
       el.innerHTML='<span class="em">'+c.em+'</span><span class="nm">'+c.name+'</span>'+
         '<button type="button" class="mini" data-catup="'+g[1]+':'+c.id+'" aria-label="Выше">↑</button>'+
         '<button type="button" class="mini" data-catdn="'+g[1]+':'+c.id+'" aria-label="Ниже">↓</button>'+
-        '<button type="button" class="mini szb" data-catsz="'+g[1]+':'+c.id+'">'+(c.sz===2?'2×':'1×')+'</button>'+
         '<button type="button" class="mini" data-catedit="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-edit"/></svg></button>'+
-        '<button type="button" class="mini" data-catdel="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-del"/></svg></button>';
+        '<button type="button" class="mini" data-catdel="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-del"/></svg></button>'+
+        '<button type="button" class="mini szb" data-catsz="'+g[1]+':'+c.id+'" aria-label="Размер плашки">'+(c.sz===2?'2×':'1×')+'</button>';
       host.appendChild(el);
     });
   });
@@ -2098,18 +2135,41 @@ function mergeRemote(res){
     if(loc&&!loc.del&&(loc.ts||0)<=(t.ts||Infinity)){ loc.del=true; changed=true; }
   });
   if(res.meta&&res.meta.ts&&res.meta.ts>(D.metaTs||0)){
-    if(res.meta.cats) D.cats=res.meta.cats;
-    if(res.meta.catsIn) D.catsIn=res.meta.catsIn;
-    if(res.meta.budgets) D.budgets=res.meta.budgets;
-    if(res.meta.start) D.start=res.meta.start;
+    var needReMeta=false;
+    /* КАТЕГОРИИ СЛИВАЮТСЯ, А НЕ ПЕРЕЗАПИСЫВАЮТСЯ — добавленные тобой не потеряются,
+       даже если с другого устройства (со стандартным набором) прилетела мета */
+    if(res.meta.cats){ var mc=mergeCatList(res.meta.cats,D.cats); D.cats=mc.list; if(mc.added) needReMeta=true; }
+    if(res.meta.catsIn){ var mi=mergeCatList(res.meta.catsIn,D.catsIn); D.catsIn=mi.list; if(mi.added) needReMeta=true; }
+    /* бюджеты по месяцам — объединяем ключи, чужой не затирает мой месяц */
+    if(res.meta.budgets){
+      var b=res.meta.budgets;
+      for(var k in D.budgets){ if(D.budgets.hasOwnProperty(k)&&!(k in b)){ b[k]=D.budgets[k]; needReMeta=true; } }
+      D.budgets=b;
+    }
+    /* остатки: пустые 0/0 из чужой меты не затирают мои реальные */
+    if(res.meta.start){
+      var rs=res.meta.start;
+      if((rs.cash||0)===0&&(rs.card||0)===0&&((D.start.cash||0)!==0||(D.start.card||0)!==0)) needReMeta=true;
+      else D.start=rs;
+    }
     if(res.meta.cfg){
       if(res.meta.cfg.theme&&res.meta.cfg.theme!==cfg.theme){ cfg.theme=res.meta.cfg.theme; applyTheme(); }
       if(res.meta.cfg.lastAcc) cfg.lastAcc=res.meta.cfg.lastAcc;
       saveCfg();
     }
     D.metaTs=res.meta.ts; changed=true;
+    /* если у меня были свои категории/месяцы, которых нет в облаке — досылаем объединённый набор,
+       чтобы таблица и все устройства сошлись на полном списке */
+    if(needReMeta&&gas.url){ saveD(); enqueueMeta(); }
   }
   if(changed) saveD();
+}
+/* объединение списков категорий по id: порядок из облака, свои-уникальные добавляются в конец */
+function mergeCatList(remoteList,localList){
+  var out=[],seen={},added=false;
+  (remoteList||[]).forEach(function(c){ if(c&&c.id&&!seen[c.id]){ out.push(c); seen[c.id]=1; } });
+  (localList||[]).forEach(function(c){ if(c&&c.id&&!seen[c.id]){ out.push(c); seen[c.id]=1; added=true; } });
+  return {list:out,added:added};
 }
 function syncBadge(){
   var dot=$('syncDot');
