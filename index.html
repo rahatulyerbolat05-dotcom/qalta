@@ -9,7 +9,8 @@
 <meta name="theme-color" content="#0e1013">
 <title>Қалта — денежный учёт</title>
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" id="touchIcon" href="ic_dark.png">
+<link rel="icon" id="favIcon" type="image/png" href="ic_dark.png">
 <style>
 /* ============================================================
    ҚАЛТА v1 — карманный денежный учёт
@@ -397,9 +398,11 @@ input:focus-visible{outline:none;}
 /* ---------- ШАПКА ---------- */
 .hero{display:flex;align-items:center;gap:14px;padding:6px 2px 18px;}
 .hero .mark{width:52px;height:52px;border-radius:15px;flex:0 0 auto;color:var(--accent-ink);
-  background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));overflow:hidden;
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 8px 24px -8px rgba(var(--glow),.55);}
+.hero .mark .appicon{width:100%;height:100%;object-fit:cover;display:block;
+  transition:opacity .35s var(--ease);}
 .hero h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:0;}
 .hero p{margin:3px 0 0;font-size:13px;color:var(--ink-soft);}
 .hero .grow{flex:1;}
@@ -479,13 +482,11 @@ input:focus-visible{outline:none;}
   color:var(--ink-soft);font-size:14px;line-height:1.55;}
 
 /* ---------- НИЖНИЙ БАР ---------- */
-.tabbar{position:fixed;left:max(10px,var(--sal));right:max(10px,var(--sar));bottom:calc(var(--sab) + 10px);z-index:30;
-  max-width:520px;margin:0 auto;
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;
   display:flex;align-items:flex-end;justify-content:space-around;gap:2px;
-  padding:8px;
-  background:var(--glass);border:1px solid var(--glass-line);border-radius:28px;
-  box-shadow:0 22px 44px -18px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);
-  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);}
+  padding:8px calc(var(--sar) + 8px) calc(var(--sab) + 8px) calc(var(--sal) + 8px);
+  background:var(--glass);border-top:1px solid var(--glass-line);
+  -webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);}
 @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))){
   .tabbar{background:var(--bg-2);}
 }
@@ -527,8 +528,6 @@ input:focus-visible{outline:none;}
 /* крупная плашка — две клетки, как виджет iOS */
 .cg.big{grid-column:span 2;flex-direction:row;gap:11px;font-size:14.5px;justify-content:flex-start;padding-left:16px;}
 .cg.big .em{font-size:30px;}
-.cg.s3{grid-column:span 3;}
-.cg.s4{grid-column:span 4;}
 .catgrid .cg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
 .catgrid.editing .cg{touch-action:none;}
 /* режим правки сетки: дрожание как на домашнем экране айфона */
@@ -546,12 +545,8 @@ input:focus-visible{outline:none;}
 .gridbar .h{flex:1;font-size:12.5px;color:var(--ink-soft);line-height:1.4;}
 .gridbar .done{height:40px;padding:0 16px;border:0;border-radius:11px;background:var(--accent);
   color:var(--accent-ink);font-weight:800;font-size:14px;}
-/* размер и ручка перетаскивания в настройках категорий */
+/* стрелки и размер в настройках категорий */
 .catmg .mini.szb{font-size:11px;font-weight:800;letter-spacing:.02em;}
-.catmg .mini.grab{cursor:grab;touch-action:none;color:var(--ink-faint);}
-.catmg.dragging{position:relative;z-index:5;background:var(--card-2);transform:scale(1.02);
-  box-shadow:0 14px 34px -12px rgba(0,0,0,.45);border-radius:12px;}
-.catmg.dragging .mini.grab{cursor:grabbing;color:var(--accent);}
 .notefield{width:100%;font-size:16px;color:var(--ink);background:var(--card);border:1.5px solid var(--line);
   border-radius:12px;padding:11px 13px;-webkit-appearance:none;appearance:none;margin-bottom:10px;}
 .notefield:focus{border-color:var(--accent);outline:none;}
@@ -726,55 +721,6 @@ input:focus-visible{outline:none;}
   #viewAdd .wrap{padding-bottom:calc(var(--sab) + 26px);}
 }
 
-/* ============ LIQUID GLASS — настоящее айфоновское стекло ============
-   Карточки полупрозрачные, фон просвечивает сквозь blur+saturate,
-   сверху блик-«спекуляр», как у стекла iOS. Без поддержки blur —
-   всё остаётся плотным (правила внутри @supports). */
-@supports ((-webkit-backdrop-filter:blur(2px)) or (backdrop-filter:blur(2px))){
-  .oprow,.catrow,.budcard,.debtcard,.cmpcard,.inout .io,.setgrp,.obcard,.typetabs,.empty{
-    background:color-mix(in srgb, var(--card) 58%, transparent);
-    -webkit-backdrop-filter:blur(16px) saturate(170%);backdrop-filter:blur(16px) saturate(170%);
-    border-color:var(--glass-line);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 12px 28px -20px rgba(0,0,0,.45);
-  }
-  .iconbtn,.tophead .back,.tophead .act.ghost,.monthnav .mn{
-    background:color-mix(in srgb, var(--card) 55%, transparent);
-    -webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);
-    border:1px solid var(--glass-line);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
-  }
-  .accseg .as,.trdir .td,.tsw{
-    background:color-mix(in srgb, var(--card) 60%, transparent);
-    -webkit-backdrop-filter:blur(12px) saturate(160%);backdrop-filter:blur(12px) saturate(160%);
-  }
-  .notefield,.datefield input,.search input,
-  .sheet input[type="text"],.sheet input[type="number"],.sheet input[type="date"],
-  .sheet input[type="password"],.sheet input[type="url"],.obcard input{
-    background:color-mix(in srgb, var(--card) 78%, transparent);
-  }
-  .pbtn.ghost{background:color-mix(in srgb, var(--card) 62%, transparent);}
-  /* цифры и плашки категорий — лёгкое стекло без blur (их много, бережём батарею) */
-  .np,.cg{background:color-mix(in srgb, var(--card) 82%, transparent);}
-  .np:active,.oprow:active,.setrow:active,.debtcard:active{background:color-mix(in srgb, var(--card-2) 75%, transparent);}
-  .toast{
-    background:var(--glass);color:var(--ink);border:1px solid var(--glass-line);
-    -webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);
-    box-shadow:0 14px 36px -10px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.14);
-  }
-}
-/* спекулярные блики на «тяжёлых» кнопках — стекло ловит свет сверху */
-.balcard{box-shadow:0 16px 40px -14px rgba(var(--glow),.6),inset 0 1.5px 0 rgba(255,255,255,.38),inset 0 0 0 1px rgba(255,255,255,.09);}
-.fab{box-shadow:0 12px 30px -8px rgba(var(--glow),.65),inset 0 1.5px 0 rgba(255,255,255,.4),inset 0 -8px 14px rgba(0,0,0,.14);}
-.bigsave,.tophead .act:not(.ghost){box-shadow:0 10px 26px -10px rgba(var(--glow),.6),inset 0 1.5px 0 rgba(255,255,255,.35);}
-.typetabs .tt.on,.pbtn.primary{box-shadow:inset 0 1.5px 0 rgba(255,255,255,.3);}
-.hero .mark{box-shadow:0 8px 24px -8px rgba(var(--glow),.55),inset 0 1.5px 0 rgba(255,255,255,.38);}
-/* шторки: ручка-граббер и боковая огранка, как в iOS */
-.sheet .box::before{content:"";display:block;width:38px;height:5px;border-radius:3px;
-  background:var(--ink-faint);opacity:.55;margin:-6px auto 12px;}
-.sheet .box{border-left:1px solid var(--glass-line);border-right:1px solid var(--glass-line);
-  box-shadow:0 -18px 50px -20px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);}
-.modal{box-shadow:0 24px 60px -20px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.14);}
-
 </style>
 </head>
 <body>
@@ -799,7 +745,6 @@ input:focus-visible{outline:none;}
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5 16 16"/></symbol>
   <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7.07 0l2.5-2.5a5 5 0 0 0-7.07-7.07L11 5.9"/><path d="M14 10a5 5 0 0 0-7.07 0l-2.5 2.5a5 5 0 0 0 7.07 7.07L13 18.1"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
-  <symbol id="i-grip" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16"/></symbol>
   <symbol id="i-arrdn" viewBox="0 0 24 24"><path d="M12 4v16M6 14l6 6 6-6"/></symbol>
   <symbol id="i-arrup" viewBox="0 0 24 24"><path d="M12 20V4M6 10l6-6 6 6"/></symbol>
   <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4v13M3.5 7.5 7 4l3.5 3.5"/><path d="M17 20V7M13.5 16.5 17 20l3.5-3.5"/></symbol>
@@ -815,7 +760,7 @@ input:focus-visible{outline:none;}
 <div class="view" id="viewOnboard">
   <div class="wrap" style="padding-bottom:40px">
     <div class="hero">
-      <div class="mark"><svg class="isv" style="width:26px;height:26px"><use href="#i-wallet"/></svg></div>
+      <div class="mark"><img class="appicon" src="ic_dark.png" alt="Қалта"></div>
       <div>
         <h1>Қалта</h1>
         <p>твой карманный учёт денег</p>
@@ -846,7 +791,7 @@ input:focus-visible{outline:none;}
 <div class="view" id="viewHome">
   <div class="wrap">
     <div class="hero">
-      <div class="mark"><svg class="isv" style="width:26px;height:26px"><use href="#i-wallet"/></svg></div>
+      <div class="mark"><img class="appicon" src="ic_dark.png" alt="Қалта"></div>
       <div>
         <h1>Қалта</h1>
         <p id="todayLbl">твои деньги под контролем</p>
@@ -1332,6 +1277,12 @@ function applyTheme(){
   else document.documentElement.setAttribute('data-theme',id);
   var mtc=document.querySelector('meta[name="theme-color"]');
   if(mtc) mtc.setAttribute('content', themeMeta(id).bg);
+  /* иконка приложения под тему: вкладка, apple-touch (для закрепления на «Домой») и лого в проге */
+  var ic='ic_'+id+'.png';
+  var t=$('touchIcon'); if(t) t.href=ic;
+  var f=$('favIcon'); if(f) f.href=ic;
+  var imgs=document.querySelectorAll('.appicon');
+  for(var i=0;i<imgs.length;i++){ if(imgs[i].getAttribute('src')!==ic) imgs[i].setAttribute('src',ic); }
 }
 function renderThemeGrid(){
   var host=$('themeGrid'); host.innerHTML='';
@@ -1494,8 +1445,7 @@ function renderCatGrid(){
   var list=addTy==='i'?D.catsIn:D.cats;
   list.forEach(function(c){
     var b=document.createElement('button');
-    var sz=c.sz||1;
-    b.type='button'; b.className='cg'+(sz>1?' big':'')+(sz>2?' s'+sz:''); b.setAttribute('data-cat',c.id);
+    b.type='button'; b.className='cg'+(c.sz===2?' big':''); b.setAttribute('data-cat',c.id);
     if(editingId && editCat===c.id) b.classList.add('on');
     if(gridEdit && gridDragId===c.id) b.classList.add('dragsrc');
     b.innerHTML='<span class="em">'+c.em+'</span>'+c.name;
@@ -1595,9 +1545,9 @@ $('catGrid').addEventListener('click',function(e){
   var catId=b.getAttribute('data-cat');
   if(gridEdit){
     if(gridSuppressClick){ gridSuppressClick=false; return; }
-    /* тап в режиме правки = размер по кругу 1×→2×→3×→4× */
+    /* тап в режиме правки = размер 1×↔2× */
     var list=curCatList();
-    list.forEach(function(c){ if(c.id===catId) c.sz=((c.sz||1)%4)+1; });
+    list.forEach(function(c){ if(c.id===catId) c.sz=(c.sz===2?1:2); });
     renderCatGrid();
     return;
   }
@@ -1916,56 +1866,32 @@ function renderCatMg(){
     g[2].forEach(function(c){
       var el=document.createElement('div'); el.className='catmg';
       el.innerHTML='<span class="em">'+c.em+'</span><span class="nm">'+c.name+'</span>'+
-        '<button type="button" class="mini grab" data-catgrab="'+g[1]+':'+c.id+'" aria-label="Перетащить"><svg class="isv" style="width:17px;height:17px"><use href="#i-grip"/></svg></button>'+
-        '<button type="button" class="mini szb" data-catsz="'+g[1]+':'+c.id+'">'+(c.sz||1)+'×</button>'+
+        '<button type="button" class="mini" data-catup="'+g[1]+':'+c.id+'" aria-label="Выше">↑</button>'+
+        '<button type="button" class="mini" data-catdn="'+g[1]+':'+c.id+'" aria-label="Ниже">↓</button>'+
+        '<button type="button" class="mini szb" data-catsz="'+g[1]+':'+c.id+'">'+(c.sz===2?'2×':'1×')+'</button>'+
         '<button type="button" class="mini" data-catedit="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-edit"/></svg></button>'+
         '<button type="button" class="mini" data-catdel="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-del"/></svg></button>';
       host.appendChild(el);
     });
   });
 }
-/* перетаскивание категории за ручку — удержи и веди вверх/вниз */
-var mgDrag=null;
-document.addEventListener('pointerdown',function(e){
-  var h=e.target.closest('[data-catgrab]'); if(!h) return;
-  e.preventDefault();
-  var row=h.closest('.catmg'); if(!row) return;
-  mgDrag={row:row,host:row.parentNode,list:h.getAttribute('data-catgrab').split(':')[0]};
-  row.classList.add('dragging');
-  try{ h.setPointerCapture(e.pointerId); }catch(err){}
-  if(navigator.vibrate) navigator.vibrate(8);
-});
-document.addEventListener('pointermove',function(e){
-  if(!mgDrag) return;
-  e.preventDefault();
-  var host=mgDrag.host, row=mgDrag.row, after=null;
-  var sibs=[].slice.call(host.children).filter(function(el){ return el!==row; });
-  for(var i=0;i<sibs.length;i++){
-    var r=sibs[i].getBoundingClientRect();
-    if(e.clientY<r.top+r.height/2){ after=sibs[i]; break; }
-  }
-  if(after){ if(after.previousElementSibling!==row) host.insertBefore(row,after); }
-  else if(host.lastElementChild!==row) host.appendChild(row);
-},{passive:false});
-function mgDragEnd(){
-  if(!mgDrag) return;
-  mgDrag.row.classList.remove('dragging');
-  var lst=mgDrag.list==='i'?D.catsIn:D.cats;
-  var order=[].map.call(mgDrag.host.querySelectorAll('[data-catgrab]'),function(b){
-    return b.getAttribute('data-catgrab').split(':')[1]; });
-  lst.sort(function(a,b){ return order.indexOf(a.id)-order.indexOf(b.id); });
-  saveD(); enqueueMeta(); renderCatMg();
-  mgDrag=null;
-}
-document.addEventListener('pointerup',mgDragEnd);
-document.addEventListener('pointercancel',mgDragEnd);
-
 document.addEventListener('click',function(e){
-  var sz=e.target.closest('[data-catsz]');
+  var up=e.target.closest('[data-catup]'), dn=e.target.closest('[data-catdn]'), sz=e.target.closest('[data-catsz]');
+  if(up||dn){
+    var pm=(up||dn).getAttribute(up?'data-catup':'data-catdn').split(':');
+    var lst=pm[0]==='i'?D.catsIn:D.cats;
+    var idx=-1; lst.forEach(function(c,i){ if(c.id===pm[1]) idx=i; });
+    var to=up?idx-1:idx+1;
+    if(idx>-1&&to>=0&&to<lst.length){
+      var t=lst[idx]; lst[idx]=lst[to]; lst[to]=t;
+      saveD(); enqueueMeta(); renderCatMg();
+    }
+    return;
+  }
   if(sz){
     var ps=sz.getAttribute('data-catsz').split(':');
     var ls=ps[0]==='i'?D.catsIn:D.cats;
-    ls.forEach(function(c){ if(c.id===ps[1]) c.sz=((c.sz||1)%4)+1; });
+    ls.forEach(function(c){ if(c.id===ps[1]) c.sz=(c.sz===2?1:2); });
     saveD(); enqueueMeta(); renderCatMg();
     return;
   }
