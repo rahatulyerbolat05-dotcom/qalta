@@ -619,13 +619,23 @@ input:focus-visible{outline:none;}
 .setrow .t1{font-size:15px;font-weight:700;}
 .setrow .t2{font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .setrow .chev{color:var(--ink-faint);}
-.catmg{display:flex;align-items:center;gap:11px;padding:11px 15px;border-bottom:1px solid var(--line);}
+.catmg{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);
+  background:var(--card);}
 .catmg:last-child{border-bottom:0;}
-.catmg .em{font-size:22px;width:36px;text-align:center;}
-.catmg .nm{flex:1;font-size:15px;font-weight:700;}
-.catmg .mini{width:38px;height:38px;border:0;border-radius:10px;background:var(--bg-2);color:var(--ink-soft);
-  display:flex;align-items:center;justify-content:center;}
-.catmg .mini:active{color:var(--danger);}
+.catmg .em{font-size:21px;width:28px;text-align:center;flex:0 0 auto;}
+.catmg .nm{flex:1;min-width:0;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.catmg .mini{width:34px;height:34px;border:0;border-radius:10px;background:var(--bg-2);color:var(--ink-soft);
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+.catmg .mini:active{transform:scale(.9);}
+.catmg .mini.szb{min-width:40px;font-size:12px;font-weight:800;letter-spacing:.02em;
+  background:var(--accent-sl);color:var(--accent);}
+/* ручка-перетаскивание (полоски) — двигаешь строку, меняешь порядок */
+.catmg .drag{width:36px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  color:var(--ink-faint);touch-action:none;cursor:grab;margin-left:-2px;}
+.catmg .drag:active{cursor:grabbing;color:var(--ink-soft);}
+.catmg.dragrow{background:var(--card-2);border-radius:12px;position:relative;z-index:3;
+  box-shadow:0 10px 26px -8px rgba(0,0,0,.45);}
+.catmg.dragrow .drag{color:var(--accent);}
 
 /* ---------- ШТОРКИ И МОДАЛКИ ---------- */
 .sheet{position:fixed;inset:0;z-index:60;display:none;}
@@ -742,6 +752,7 @@ input:focus-visible{outline:none;}
   <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6.5" width="19" height="11" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.8v.01M18 14.2v.01"/></symbol>
   <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 14.5h4"/></symbol>
   <symbol id="i-del" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.8A1 1 0 0 1 10.5 4h3a1 1 0 0 1 1 .8V7M6.5 7l1 13h9l1-13"/></symbol>
+  <symbol id="i-drag" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M14.5 4.5l5 5L8 21H3v-5z"/><path d="M12.5 6.5l5 5"/></symbol>
   <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2.5l3.5 3.5L17 9.5"/><path d="M3.5 11V9.5a3.5 3.5 0 0 1 3.5-3.5h13"/><path d="M7 21.5L3.5 18 7 14.5"/><path d="M20.5 13v1.5a3.5 3.5 0 0 1-3.5 3.5H4"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10.5l5 5 5-5"/><path d="M4 20h16"/></symbol>
@@ -1902,29 +1913,54 @@ function renderCatMg(){
     var host=$(g[0]); host.innerHTML='';
     g[2].forEach(function(c){
       var el=document.createElement('div'); el.className='catmg';
+      el.setAttribute('data-id',c.id); el.setAttribute('data-list',g[1]);
       el.innerHTML='<span class="em">'+c.em+'</span><span class="nm">'+c.name+'</span>'+
-        '<button type="button" class="mini" data-catup="'+g[1]+':'+c.id+'" aria-label="Выше">↑</button>'+
-        '<button type="button" class="mini" data-catdn="'+g[1]+':'+c.id+'" aria-label="Ниже">↓</button>'+
-        '<button type="button" class="mini" data-catedit="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-edit"/></svg></button>'+
-        '<button type="button" class="mini" data-catdel="'+g[1]+':'+c.id+'"><svg class="isv" style="width:16px;height:16px"><use href="#i-del"/></svg></button>'+
-        '<button type="button" class="mini szb" data-catsz="'+g[1]+':'+c.id+'" aria-label="Размер плашки">'+(c.sz===2?'2×':'1×')+'</button>';
+        '<button type="button" class="mini szb" data-catsz="'+g[1]+':'+c.id+'" aria-label="Размер плашки">'+(c.sz===2?'2×':'1×')+'</button>'+
+        '<button type="button" class="mini" data-catedit="'+g[1]+':'+c.id+'" aria-label="Изменить"><svg class="isv" style="width:16px;height:16px"><use href="#i-edit"/></svg></button>'+
+        '<button type="button" class="mini" data-catdel="'+g[1]+':'+c.id+'" aria-label="Удалить"><svg class="isv" style="width:16px;height:16px"><use href="#i-del"/></svg></button>'+
+        '<span class="drag" aria-label="Перетащи, чтобы поменять порядок"><svg class="isv" style="width:22px;height:22px"><use href="#i-drag"/></svg></span>';
       host.appendChild(el);
     });
   });
 }
-document.addEventListener('click',function(e){
-  var up=e.target.closest('[data-catup]'), dn=e.target.closest('[data-catdn]'), sz=e.target.closest('[data-catsz]');
-  if(up||dn){
-    var pm=(up||dn).getAttribute(up?'data-catup':'data-catdn').split(':');
-    var lst=pm[0]==='i'?D.catsIn:D.cats;
-    var idx=-1; lst.forEach(function(c,i){ if(c.id===pm[1]) idx=i; });
-    var to=up?idx-1:idx+1;
-    if(idx>-1&&to>=0&&to<lst.length){
-      var t=lst[idx]; lst[idx]=lst[to]; lst[to]=t;
-      saveD(); enqueueMeta(); renderCatMg();
+/* перетаскивание строк категорий за ручку ≡ — меняет порядок (иерархию) */
+var cmDrag=null;
+function cmStart(e){
+  var h=e.target.closest('.drag'); if(!h) return;
+  var row=h.closest('.catmg'); if(!row) return;
+  e.preventDefault();
+  cmDrag={row:row, host:row.parentNode, list:row.getAttribute('data-list')};
+  row.classList.add('dragrow');
+  if(navigator.vibrate) navigator.vibrate(8);
+}
+$('catMgE').addEventListener('pointerdown',cmStart);
+$('catMgI').addEventListener('pointerdown',cmStart);
+document.addEventListener('pointermove',function(e){
+  if(!cmDrag) return;
+  e.preventDefault();
+  var ch=cmDrag.host.querySelectorAll('.catmg');
+  for(var i=0;i<ch.length;i++){
+    if(ch[i]===cmDrag.row) continue;
+    var r=ch[i].getBoundingClientRect();
+    if(e.clientY>=r.top && e.clientY<=r.bottom){
+      var before=e.clientY < r.top + r.height/2;
+      cmDrag.host.insertBefore(cmDrag.row, before?ch[i]:ch[i].nextSibling);
+      break;
     }
-    return;
   }
+},{passive:false});
+function cmEnd(){
+  if(!cmDrag) return;
+  var ids=[]; cmDrag.host.querySelectorAll('.catmg').forEach(function(r){ ids.push(r.getAttribute('data-id')); });
+  var arr=cmDrag.list==='i'?D.catsIn:D.cats;
+  arr.sort(function(a,b){ return ids.indexOf(a.id)-ids.indexOf(b.id); });
+  cmDrag.row.classList.remove('dragrow'); cmDrag=null;
+  saveD(); enqueueMeta(); renderCatMg();
+}
+document.addEventListener('pointerup',cmEnd);
+document.addEventListener('pointercancel',cmEnd);
+document.addEventListener('click',function(e){
+  var sz=e.target.closest('[data-catsz]');
   if(sz){
     var ps=sz.getAttribute('data-catsz').split(':');
     var ls=ps[0]==='i'?D.catsIn:D.cats;
