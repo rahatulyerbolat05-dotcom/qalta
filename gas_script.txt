@@ -81,6 +81,7 @@ function doPush(changes){
     } else if(c.kind==='meta'){
       metaSheet().getRange(1,1).setValue(JSON.stringify({
         cats:c.row.cats, catsIn:c.row.catsIn, budgets:c.row.budgets, start:c.row.start,
+        wish:c.row.wish||[], plans:c.row.plans||[],
         cfg:c.row.cfg||null, ts:c.ts||Date.now()
       }));
     }
