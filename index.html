@@ -381,6 +381,7 @@ body{
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   min-height:100vh; min-height:100dvh;
   overscroll-behavior:none;
+  overflow-x:hidden;
 }
 /* стабильная полоса прокрутки + тонкий скроллбар в цвет темы */
 html{overflow-y:scroll;}
@@ -447,9 +448,9 @@ input:focus-visible{outline:none;}
 /* сворачиваемый заголовок секции */
 .secttgl{display:flex;align-items:center;gap:6px;width:100%;background:none;border:0;padding:0;
   text-align:left;font-family:inherit;cursor:pointer;}
-.secttgl .chv{width:15px;height:15px;margin-left:auto;transition:transform .22s var(--ease);transform:rotate(90deg);}
+.secttgl .chv{width:15px;height:15px;margin-left:7px;transition:transform .22s var(--ease);transform:rotate(90deg);}
 .secttgl.open .chv{transform:rotate(-90deg);}
-.secttgl .cnt{font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+.secttgl .cnt{margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
 
 /* ---------- КАРТОЧКА БАЛАНСА ---------- */
 .balcard{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:var(--accent-ink);
@@ -498,9 +499,9 @@ input:focus-visible{outline:none;}
 .oprow .em{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;
   font-size:21px;flex:0 0 auto;background:var(--accent-sl);}
 .oprow .mid{flex:1;min-width:0;}
-.oprow .t1{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.oprow .t2{font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.oprow .amt{font-size:15.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.oprow .t1{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.oprow .t2{display:block;font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.oprow .amt{flex:0 0 auto;font-size:15.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .oprow .amt.in{color:var(--play);}
 .oprow .amt.tr{color:var(--tag);}
 .empty{border:1.5px dashed var(--line);border-radius:16px;padding:28px 18px;text-align:center;
@@ -546,13 +547,16 @@ input:focus-visible{outline:none;}
 .accseg.dseg .as{flex:1;padding:0 6px;font-size:12.5px;justify-content:center;gap:5px;}
 .accseg.dseg .as .isv{width:15px;height:15px;}
 .accseg .as .isv{width:16px;height:16px;}
-.catgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;}
+.catgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;grid-auto-flow:dense;}
 .cg{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:9px 5px 8px;
   display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11.5px;font-weight:550;color:var(--ink-soft);
-  min-height:68px;justify-content:center;line-height:1.2;text-align:center;
+  min-height:68px;justify-content:center;line-height:1.2;text-align:center;min-width:0;
   box-shadow:inset 0 1px 0 var(--glass-line);transition:border-color var(--t-fast),background var(--t-fast);}
 .cg .em{font-size:23px;line-height:1;}
-.cg .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+/* узкая плашка: имя переносится максимум на 2 строки; широкая — одна строка с «…» */
+.cg .nm{min-width:0;max-width:100%;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;}
+.cg.s2 .nm,.cg.s3 .nm,.cg.s4 .nm{display:block;white-space:nowrap;text-overflow:ellipsis;}
 .cg:active{transform:scale(.96);border-color:var(--accent);}
 .cg.on{border-color:var(--accent);background:var(--accent-sl);color:var(--ink);font-weight:620;}
 /* широкие плашки — 2, 3 и 4 клетки, как виджеты iOS */
@@ -660,8 +664,8 @@ input:focus-visible{outline:none;}
   display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
 .setrow .ic .isv{width:18px;height:18px;}
 .setrow .tx{flex:1;min-width:0;}
-.setrow .t1{font-size:15px;font-weight:600;}
-.setrow .t2{font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.setrow .t1{display:block;font-size:15px;font-weight:600;}
+.setrow .t2{display:block;font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .setrow .chev{color:var(--ink-faint);}
 .catmg{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);
   background:var(--card);}
@@ -2493,8 +2497,39 @@ document.addEventListener('click',function(e){
   var nav=e.target.closest('[data-nav]');
   if(nav) show(nav.getAttribute('data-nav'));
 });
+
+/* свайп вправо от левого края — назад, как на iPhone */
+var edgeSw=null;
+document.addEventListener('touchstart',function(e){
+  if(e.touches.length!==1) return;
+  var t=e.touches[0];
+  if(t.clientX>28) return;                                   /* только от кромки */
+  if(document.querySelector('.sheet.show')||$('confirmBg').classList.contains('show')) return;
+  var cur=curView();
+  if(cur==='home'||cur==='onboard') return;
+  edgeSw={x:t.clientX,y:t.clientY,ok:false,dead:false};
+},{passive:true});
+document.addEventListener('touchmove',function(e){
+  if(!edgeSw||edgeSw.dead) return;
+  var t=e.touches[0];
+  var dx=t.clientX-edgeSw.x, dy=Math.abs(t.clientY-edgeSw.y);
+  if(!edgeSw.ok&&dy>26&&dy>dx){ edgeSw.dead=true; return; }  /* это вертикальный скролл */
+  if(dx>64&&dx>dy*1.4) edgeSw.ok=true;
+},{passive:true});
+document.addEventListener('touchend',function(){
+  if(edgeSw&&edgeSw.ok){
+    if(gridEdit) exitGridEdit();
+    show('home');
+    if(navigator.vibrate) navigator.vibrate(6);
+  }
+  edgeSw=null;
+});
+document.addEventListener('touchcancel',function(){ edgeSw=null; });
+function curView(){
+  return Object.keys(VIEWS).filter(function(k){ return $(VIEWS[k]).classList.contains('on'); })[0]||'home';
+}
 function rerenderAll(){
-  var cur=Object.keys(VIEWS).filter(function(k){ return $(VIEWS[k]).classList.contains('on'); })[0]||'home';
+  var cur=curView();
   if(cur==='home') renderHome();
   if(cur==='history') renderHistory();
   if(cur==='debts') renderDebts();
